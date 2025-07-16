@@ -14,9 +14,9 @@ A comprehensive Node.js API server that integrates with Google's Gemini AI to pr
 
 ## Technologies Used
 
-- **Node.js**: Runtime environment
+- **Node.js**: Runtime environment (ES6 modules)
 - **Express.js**: Web framework for building the API
-- **Google Generative AI**: Gemini 2.5 Flash model for AI content generation
+- **@google/genai**: Google Generative AI SDK for Gemini 2.5 Flash model
 - **Multer**: Middleware for handling multipart/form-data (file uploads)
 - **dotenv**: Environment variable management
 
@@ -24,7 +24,7 @@ A comprehensive Node.js API server that integrates with Google's Gemini AI to pr
 
 Before running this project, make sure you have:
 
-- Node.js (v14 or higher)
+- Node.js (v18 or higher with ES modules support)
 - npm or yarn package manager
 - Google AI Studio API key (Gemini API access)
 
@@ -38,17 +38,29 @@ Before running this project, make sure you have:
 
 2. **Install dependencies**
    ```bash
-   npm install
+   npm install @google/genai express dotenv multer
    ```
 
-3. **Environment Setup**
+3. **Package.json Configuration**
+   Ensure your `package.json` includes ES modules support:
+   ```json
+   {
+     "type": "module",
+     "scripts": {
+       "start": "node index.js",
+       "dev": "node --watch index.js"
+     }
+   }
+   ```
+
+4. **Environment Setup**
    Create a `.env` file in the root directory:
    ```env
    GEMINI_API_KEY=your_gemini_api_key_here
    PORT=3000
    ```
 
-4. **Get your Gemini API Key**
+5. **Get your Gemini API Key**
    - Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
    - Generate a new API key
    - Copy the key to your `.env` file
@@ -58,6 +70,10 @@ Before running this project, make sure you have:
 ### Starting the Server
 
 ```bash
+npm start
+# or for development with auto-reload
+npm run dev
+# or directly
 node index.js
 ```
 
@@ -211,11 +227,22 @@ The API returns appropriate HTTP status codes and error messages:
 
 ### Model Configuration
 
-The project uses `gemini-2.5-flash` model. You can modify the model in `index.js`:
+The project uses `gemini-2.5-flash` model with configurable parameters. You can modify the model settings in `index.js`:
 
 ```javascript
-const model = genAI.getGenerativeModel({model: 'gemini-2.5-flash'});
+const MODEL_SETTINGS = {
+  model: 'gemini-2.5-flash',
+  contents: '',
+  temperature: 0.9,    // Controls randomness (0.0 - 1.0)
+  topP: 0.95,         // Nucleus sampling parameter
+  topK: 40,           // Top-k sampling parameter
+};
 ```
+
+**Model Parameters:**
+- `temperature`: Higher values (0.9) make output more creative, lower values (0.1) more focused
+- `topP`: Controls diversity via nucleus sampling (0.1 - 1.0)
+- `topK`: Limits token selection to top K most likely tokens
 
 Available models:
 - `gemini-2.5-flash` (faster, cost-effective)
@@ -225,10 +252,10 @@ Available models:
 
 ```
 hactiv8-gemini-api/
-├── index.js          # Main application file
+├── index.js          # Main application file (ES6 modules)
 ├── package.json      # Project dependencies and scripts
 ├── .env             # Environment variables (create this)
-├── .gitignore       # Git ignore file (recommended)
+├── .gitignore       # Git ignore file
 └── README.md        # Project documentation
 ```
 
@@ -246,9 +273,16 @@ hactiv8-gemini-api/
 ```javascript
 app.post('/your-new-endpoint', upload.single('file'), async (req, res) => {
   try {
-    // Your logic here
-    const result = await model.generateContent(prompt);
-    res.json({ output: result.response.candidates[0].content.parts[0].text });
+    const { prompt } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ code: 400, error: 'Prompt is required' });
+    }
+
+    const localParamModel = MODEL_SETTINGS;
+    localParamModel.contents = prompt;
+    const result = await ai.models.generateContent(localParamModel);
+    
+    res.json({ output: result.text });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Operation failed' });
