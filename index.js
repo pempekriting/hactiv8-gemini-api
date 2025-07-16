@@ -1,16 +1,25 @@
-const express = require('express');
-const dotenv = require('dotenv');
-const multer = require('multer');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+import express, { json } from 'express';
+import { config } from 'dotenv';
+import multer, { memoryStorage } from 'multer';
+import { GoogleGenAI } from '@google/genai';
 
-dotenv.config();
+config();
 const app = express();
-app.use(express.json());
+app.use(json());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({model: `gemini-2.5-flash`});
+const MODEL_SETTINGS = {
+  model: 'gemini-2.5-flash',
+  contents: ``,
+  temperature: 0.9,
+  topP: 0.95,
+  topK: 40,
+};
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 const PORT = process.env.PORT || 3000;
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: memoryStorage() });
 
 async function fileToGenerativePart(buffer, mimeType) {
   return {
@@ -32,10 +41,14 @@ app.post(`/generate-text`, async (req, res) => {
       return res.status(400).json({ code: 400, error: 'Prompt is required' });
     }
 
-    const result = await model.generateContent(prompt);
-    const response = result.response;
+    const localParamModel = MODEL_SETTINGS;
+    localParamModel.contents = prompt;
+    const result = await ai.models.generateContent(localParamModel);
 
-    res.json({ output: response.candidates[0].content.parts[0].text });
+    res.json({ 
+      output: result.text
+    });
+
   } catch (error) {
     console.error('Error generating text:', error);
     res.status(500).json({ error: 'Failed to generate text' });
@@ -52,11 +65,11 @@ app.post(`/generate-from-image`, upload.single('image'), async (req, res) => {
     }
 
     const image = await fileToGenerativePart(req.file.buffer, req.file.mimetype);
+    const localParamModel = MODEL_SETTINGS;
+    localParamModel.contents = [image, {text: req.body.prompt}];
+    const result = await ai.models.generateContent(localParamModel);
 
-    const result = await model.generateContent([req.body.prompt, image]);
-    const response = result.response;
-
-    res.json({ output: response.candidates[0].content.parts[0].text });
+    res.json({ output: result.text });
   } catch (error) {
     console.error('Error generating from image:', error);
     res.status(500).json({ error: 'Failed to generate from image' });
@@ -73,11 +86,11 @@ app.post(`/generate-from-files`, upload.array('files'), async (req, res) => {
     }
 
     const files = await Promise.all(req.files.map(file => fileToGenerativePart(file.buffer, file.mimetype)));
-
-    const result = await model.generateContent([req.body.prompt, ...files]);
-    const response = result.response;
-
-    res.json({ output: response.candidates[0].content.parts[0].text });
+    const localParamModel = MODEL_SETTINGS;
+    localParamModel.contents = [{text: req.body.prompt}, ...files];
+    const result = await ai.models.generateContent(localParamModel);
+    
+    res.json({ output: result.text });
   } catch (error) {
     console.error('Error generating from files:', error);
     res.status(500).json({ error: 'Failed to generate from files' });
@@ -94,11 +107,11 @@ app.post(`/generate-from-audio`, upload.single('audio'), async (req, res) => {
     }
 
     const audio = await fileToGenerativePart(req.file.buffer, req.file.mimetype);
+    const localParamModel = MODEL_SETTINGS;
+    localParamModel.contents = [audio, {text: req.body.prompt}];
+    const result = await ai.models.generateContent(localParamModel);
 
-    const result = await model.generateContent([req.body.prompt, audio]);
-    const response = result.response;
-
-    res.json({ output: response.candidates[0].content.parts[0].text });
+    res.json({ output: result.text });
   } catch (error) {
     console.error('Error generating from audio:', error);
     res.status(500).json({ error: 'Failed to generate from audio' });
